@@ -5,40 +5,56 @@
 
 set -e
 
+REPO="https://github.com/virus322/backhaul-installer2.git"
 
-VERSION="0.7.2"
-INSTALL_DIR="/usr/local/bin"
-CONFIG_DIR="/etc/backhaul"
-CONFIG_FILE="$CONFIG_DIR/config.toml"
-SERVICE_FILE="/etc/systemd/system/backhaul.service"
-
+INSTALL_DIR="/opt/backhaul-installer"
 
 clear
 
-echo "======================================"
-echo " Backhaul Professional Installer"
+echo "================================="
+echo " Backhaul Installer"
 echo " Author: pouyazamani"
-echo " Version: $VERSION"
-echo "======================================"
-
+echo "================================="
 
 
 if [ "$EUID" -ne 0 ]; then
-    echo "Please run as root"
+    echo "Run as root"
     exit 1
 fi
 
 
-
-echo "[+] Updating packages..."
+echo "[+] Installing requirements"
 
 apt update -y
 
-apt install -y curl wget tar ufw
+apt install -y git curl wget tar ufw
+
+
+echo "[+] Download project files"
+
+
+rm -rf $INSTALL_DIR
+
+git clone $REPO $INSTALL_DIR
+
+
+chmod +x $INSTALL_DIR/*.sh
+
+chmod +x $INSTALL_DIR/scripts/*.sh 2>/dev/null || true
 
 
 
-echo "[+] Detecting CPU..."
+cd $INSTALL_DIR
+
+
+
+echo "[+] Running installer"
+
+
+
+
+
+VERSION="0.7.2"
 
 ARCH=$(uname -m)
 
@@ -53,170 +69,17 @@ ARCH="arm64"
 ;;
 
 *)
-echo "CPU not supported"
-exit 1
-;;
-
-esac
-
-
-
-mkdir -p $CONFIG_DIR
-
-
-
-echo ""
-echo "Select mode:"
-echo ""
-echo "1) Server (Kharej)"
-echo "2) Client (Iran)"
-echo ""
-
-read -p "Choice: " MODE
-
-
-
-echo ""
-read -p "Enter tunnel port [3080]: " PORT
-
-PORT=${PORT:-3080}
-
-
-
-echo "[+] Downloading Backhaul..."
-
-wget -q \
-"https://github.com/Musixal/Backhaul/releases/download/v0.7.2/backhaul_linux_${ARCH}.tar.gz" \
--O /tmp/backhaul.tar.gz
-
-
-
-tar -xf /tmp/backhaul.tar.gz -C /tmp
-
-
-
-cp /tmp/backhaul $INSTALL_DIR/backhaul
-
-chmod +x $INSTALL_DIR/backhaul
-
-
-
-
-if [ "$MODE" = "1" ]; then
-
-
-echo "[+] Creating Server config"
-
-
-cat > $CONFIG_FILE <<EOF
-
-[server]
-
-bind_addr = "0.0.0.0:$PORT"
-
-transport = "tcp"
-
-keepalive_period = 75
-
-EOF
-
-
-
-ufw allow $PORT/tcp || true
-
-
-
-elif [ "$MODE" = "2" ]; then
-
-
-read -p "Server outside IP: " SERVER_IP
-
-
-
-cat > $CONFIG_FILE <<EOF
-
-[client]
-
-remote_addr = "$SERVER_IP:$PORT"
-
-transport = "tcp"
-
-keepalive_period = 75
-
-EOF
-
-
-
-else
-
-echo "Invalid option"
-exit 1
-
-fi
-
-
-
-
-echo "[+] Creating service..."
-
-cat > $SERVICE_FILE <<EOF
-
-[Unit]
-
-Description=Backhaul Tunnel
-
-After=network-online.target
-
-
-[Service]
-
-Type=simple
-
-ExecStart=/usr/local/bin/backhaul -c $CONFIG_FILE
-
-Restart=always
-
-RestartSec=5
-
-LimitNOFILE=65535
-
-
-[Install]
-
-WantedBy=multi-user.target
-
-EOF
-
-
-
-
-systemctl daemon-reload
-
-systemctl enable backhaul
-
-systemctl restart backhaul
-
-
-
-
-echo ""
-echo "======================================"
-echo " Installation Finished"
-echo "======================================"
-
-echo ""
-
-systemctl status backhaul --no-pageraarch64)
-ARCH="arm64"
-;;
-*)
 echo "Unsupported CPU"
 exit 1
 ;;
+
 esac
 
 
-echo "Downloading Backhaul..."
+
+mkdir -p /etc/backhaul
+
+
 
 wget -q \
 https://github.com/Musixal/Backhaul/releases/download/v0.7.2/backhaul_linux_${ARCH}.tar.gz \
@@ -226,70 +89,70 @@ https://github.com/Musixal/Backhaul/releases/download/v0.7.2/backhaul_linux_${AR
 tar -xf /tmp/backhaul.tar.gz -C /tmp
 
 
-mv /tmp/backhaul $BIN
+cp /tmp/backhaul /usr/local/bin/backhaul
 
-chmod +x $BIN
+chmod +x /usr/local/bin/backhaul
+
+
 
 
 echo ""
-echo "Choose mode:"
-echo "1) Server"
-echo "2) Client"
+echo "1) Server (Outside)"
+echo "2) Client (Iran)"
 
-read -p "Select: " MODE
+read -p "Choose: " MODE
+
+
+read -p "Port [3080]: " PORT
+
+PORT=${PORT:-3080}
+
 
 
 if [ "$MODE" = "1" ]; then
 
-cat > $DIR/config.toml <<EOF
+
+cat >/etc/backhaul/config.toml <<EOF
+
 [server]
 
-bind_addr = "0.0.0.0:3080"
+bind_addr="0.0.0.0:$PORT"
 
-transport = "tcp"
+transport="tcp"
 
 EOF
+
+
+
+ufw allow $PORT/tcp || true
+
+
 
 else
 
-read -p "Server IP: " SERVER
 
-cat > $DIR/config.toml <<EOF
+read -p "Outside IP: " IP
+
+
+
+cat >/etc/backhaul/config.toml <<EOF
+
 [client]
 
-remote_addr = "${SERVER}:3080"
+remote_addr="$IP:$PORT"
 
-transport = "tcp"
+transport="tcp"
 
 EOF
+
 
 fi
 
 
 
-cat > /etc/systemd/system/backhaul.service <<EOF
 
-[Unit]
-Description=Backhaul Tunnel
-After=network.target
-
-
-[Service]
-
-Type=simple
-
-ExecStart=$BIN -c $DIR/config.toml
-
-Restart=always
-
-RestartSec=3
-
-
-[Install]
-
-WantedBy=multi-user.target
-
-EOF
+cp $INSTALL_DIR/systemd/backhaul.service \
+/etc/systemd/system/backhaul.service
 
 
 
@@ -300,10 +163,12 @@ systemctl enable backhaul
 systemctl restart backhaul
 
 
-echo ""
-echo "=============================="
-echo " Installed Successfully"
-echo "=============================="
 
-echo "Status:"
-echo "systemctl status backhaul"
+echo ""
+echo "================================="
+echo " Done"
+echo "Project installed:"
+echo "$INSTALL_DIR"
+echo "================================="
+
+systemctl status backhaul --no-pager
